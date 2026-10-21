@@ -49,3 +49,25 @@ def test_api_key_precedence(tmp_path: Path, monkeypatch) -> None:
     assert config.resolve_api_key(cfg) == "direct"
     cfg2 = config.ModelConfig(api_key="", api_key_env="ENV_KEY")
     assert config.resolve_api_key(cfg2) == "from-env"
+
+
+def test_json_format_and_extra_body(tmp_path: Path) -> None:
+    path = tmp_path / "config.toml"
+    path.write_text(
+        """
+[models.default]
+model = "ollama_chat/qwen2.5:7b"
+
+[models.timeline]
+model = "openai/system"
+json_format = "json_schema"
+extra_body = { stream = false }
+"""
+    )
+    cfg = config.load(path)
+    default = cfg.model_for("reducer")
+    timeline = cfg.model_for("timeline")
+    assert default.json_format == "json_object"
+    assert default.extra_body == {}
+    assert timeline.json_format == "json_schema"
+    assert timeline.extra_body == {"stream": False}

@@ -18,6 +18,13 @@ class ModelConfig:
     api_key: str = ""
     api_key_env: str = "OPENAI_API_KEY"
     max_tokens: int | None = None
+    # How JSON-mode stages (timeline, reducer) request structured output:
+    # "json_object" (default) or "json_schema", which sends each stage's
+    # schema. Needed by macOS 27's `fm serve`; also keeps small local models
+    # from emitting broken JSON.
+    json_format: str = "json_object"
+    # Extra fields merged into every request body, e.g. {stream = false}.
+    extra_body: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass

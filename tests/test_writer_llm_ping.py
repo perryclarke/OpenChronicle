@@ -55,6 +55,27 @@ def test_ping_stage_success_records_latency(monkeypatch: pytest.MonkeyPatch) -> 
     # ping should keep the request small and bounded.
     assert calls[0]["max_tokens"] == 4
     assert "timeout" in calls[0]
+    assert "extra_body" not in calls[0]
+
+
+def test_ping_stage_forwards_extra_body(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Servers that need extra_body (e.g. fm serve's stream=false) must get it on ping too."""
+    monkeypatch.delenv("OPENCHRONICLE_LLM_MOCK", raising=False)
+    import litellm
+
+    calls: list[dict] = []
+
+    def fake_completion(**kwargs):
+        calls.append(kwargs)
+        return object()
+
+    monkeypatch.setattr(litellm, "completion", fake_completion)
+    cfg = Config(models={"default": ModelConfig(model="openai/system", extra_body={"stream": False})})
+
+    res = llm_mod.ping_stage(cfg, "timeline")
+
+    assert res.ok is True
+    assert calls[0]["extra_body"] == {"stream": False}
 
 
 def test_ping_stage_failure_label_includes_class_and_message(

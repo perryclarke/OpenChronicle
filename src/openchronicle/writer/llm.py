@@ -31,8 +31,13 @@ def call_llm(
     messages: list[dict[str, Any]],
     tools: list[dict[str, Any]] | None = None,
     json_mode: bool = False,
+    json_schema: dict[str, Any] | None = None,
 ) -> Any:
     """Invoke litellm for the given stage. Returns the raw ModelResponse.
+
+    ``json_schema`` is an OpenAI-style ``{"name": ..., "schema": ...}``
+    object. It is only sent when the stage's model sets
+    ``json_format = "json_schema"``; otherwise JSON mode uses json_object.
 
     Respects OPENCHRONICLE_LLM_MOCK=1 for tests: returns a minimal stub.
     """
@@ -55,9 +60,14 @@ def call_llm(
         kwargs["tools"] = tools
         kwargs["tool_choice"] = "auto"
     if json_mode:
-        kwargs["response_format"] = {"type": "json_object"}
+        if model_cfg.json_format == "json_schema" and json_schema:
+            kwargs["response_format"] = {"type": "json_schema", "json_schema": json_schema}
+        else:
+            kwargs["response_format"] = {"type": "json_object"}
     if model_cfg.max_tokens:
         kwargs["max_tokens"] = model_cfg.max_tokens
+    if model_cfg.extra_body:
+        kwargs["extra_body"] = dict(model_cfg.extra_body)
 
     logger.debug("llm call stage=%s model=%s", stage, model_cfg.model)
     return litellm.completion(**kwargs)
@@ -126,6 +136,8 @@ def ping_stage(cfg: Config, stage: str, *, timeout: float = 5.0) -> PingResult:
     api_key = resolve_api_key(model_cfg)
     if api_key:
         kwargs["api_key"] = api_key
+    if model_cfg.extra_body:
+        kwargs["extra_body"] = dict(model_cfg.extra_body)
 
     start = time.monotonic()
     try:

@@ -75,9 +75,33 @@ model = "ollama/qwen2.5:14b"            # match classifier or stronger
 Things to check before trusting a local setup:
 
 - **Tool-calling support is required for the classifier.** It drives `append` / `create` / `supersede` through a function-call loop. `qwen2.5`, `llama3.1`, `mistral-nemo` and `command-r` all work; small Llama-3.2 and Phi variants are unreliable.
-- **JSON mode is required for `timeline` and `reducer`.** They pass `response_format={"type":"json_object"}`, which litellm forwards to Ollama as `format: "json"`. If the model ignores it and returns prose, both stages will log parse errors — pick a bigger model.
+- **JSON mode is required for `timeline` and `reducer`.** They pass `response_format={"type":"json_object"}` (or a JSON schema when `json_format = "json_schema"`), which litellm forwards to Ollama as `format`. If the model ignores it and returns prose, both stages will log parse errors — pick a bigger model. With small models, prefer `json_format = "json_schema"`: in testing, `qwen2.5:7b` in plain JSON mode repeatedly stopped mid-string when a sub-task quoted typed text, while schema-constrained output stayed valid.
 - **Context window.** Timeline blocks are 1-min, reducer flushes consume ~5 blocks, a 2-hour session can stack ~24 blocks. Set Ollama's `num_ctx` to ≥ 16 k for `timeline`, ≥ 32 k for `reducer` / `classifier`. Tiny defaults (2–4 k) will silently truncate.
 - **Leave `api_key_env` empty.** If you keep the default `"OPENAI_API_KEY"` and don't have one exported, litellm complains even though Ollama wouldn't use it.
+
+### Apple's on-device model (macOS 27)
+
+macOS 27 ships `fm`, which serves Apple's on-device Foundation Model as an OpenAI-compatible Chat Completions endpoint: no download, no key. Agree to its terms once, then keep a server running (for example as a launchd agent):
+
+```bash
+sudo fm license
+fm serve --host 127.0.0.1 --port 1976
+```
+
+`fm serve` differs from OpenAI in two ways, both handled by per-model settings:
+
+```toml
+[models.timeline]
+model = "openai/system"
+base_url = "http://127.0.0.1:1976/v1"
+api_key = "unused"                 # litellm's OpenAI client needs a value; fm ignores it
+json_format = "json_schema"        # fm rejects json_object; send each stage's JSON schema instead
+extra_body = { stream = false }    # fm streams unless the request explicitly says not to
+```
+
+The on-device model has a **4,096-token context** shared by prompt and reply. That fits most 1-minute `timeline` windows; busy windows overflow and fall back to the heuristic block. It is too small for `reducer`, `classifier` and `compact`, so pair it with a larger model (such as Ollama above) for those stages.
+
+`json_format` and `extra_body` work with any model section. `json_format` defaults to `"json_object"`; `extra_body` is merged into every request body, including the `openchronicle status` probe.
 
 ## `[capture]`
 

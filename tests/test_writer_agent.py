@@ -75,7 +75,7 @@ def test_writer_run_reduces_pending_and_classifies(
     classifier_resp = _choice_response([_tool_call("commit", {"summary": ""}, cid="c1")])
     script = [reducer_resp, classifier_resp]
 
-    def fake_call_llm(cfg, stage, *, messages, tools=None, json_mode=False):
+    def fake_call_llm(cfg, stage, *, messages, tools=None, json_mode=False, json_schema=None):
         return script.pop(0)
 
     monkeypatch.setattr(llm_mod, "call_llm", fake_call_llm)

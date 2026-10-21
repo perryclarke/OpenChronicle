@@ -47,6 +47,19 @@ from . import llm as llm_mod
 # session) already wrote for the same day.
 _PRECEDING_ENTRY_LIMIT = 6
 
+# Mirrors the output fields documented in prompts/session_reduce.md.
+_REDUCE_JSON_SCHEMA = {
+    "name": "session_reduce",
+    "schema": {
+        "type": "object",
+        "properties": {
+            "summary": {"type": "string"},
+            "sub_tasks": {"type": "array", "items": {"type": "string"}},
+        },
+        "required": ["summary", "sub_tasks"],
+    },
+}
+
 logger = get("openchronicle.writer")
 
 # Matches Einsia. The index into this tuple is the attempt counter
@@ -502,6 +515,7 @@ def _call_reducer_llm(
             cfg, "reducer",
             messages=[{"role": "user", "content": prompt}],
             json_mode=True,
+            json_schema=_REDUCE_JSON_SCHEMA,
         )
         text = llm_mod.extract_text(resp).strip()
         if not text:

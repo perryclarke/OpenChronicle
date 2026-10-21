@@ -38,6 +38,16 @@ _PER_CAPTURE_TEXT_LIMIT = 4000
 # tend to be more informative.
 _MAX_EVENTS_PER_WINDOW = 30
 
+# Mirrors the output shape documented in prompts/timeline_block.md.
+_BLOCK_JSON_SCHEMA = {
+    "name": "timeline_block",
+    "schema": {
+        "type": "object",
+        "properties": {"entries": {"type": "array", "items": {"type": "string"}}},
+        "required": ["entries"],
+    },
+}
+
 
 def _capture_stem_in_window(stem: str, start: datetime, end: datetime) -> bool:
     """Parse the filename stem back to a datetime and check window membership."""
@@ -239,6 +249,7 @@ def produce_block_for_window(
             "timeline",
             messages=[{"role": "user", "content": prompt}],
             json_mode=True,
+            json_schema=_BLOCK_JSON_SCHEMA,
         )
         text = llm_mod.extract_text(resp).strip()
         data = json.loads(text) if text else {}
