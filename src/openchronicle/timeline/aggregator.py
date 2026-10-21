@@ -48,9 +48,10 @@ def _capture_stem_in_window(stem: str, start: datetime, end: datetime) -> bool:
 
 
 def _stem_to_dt(stem: str) -> datetime | None:
-    # Capture filenames look like ``2026-04-21T17-07-32p08-00`` or
-    # ``…m05-00`` for negative offsets. Reverse the sanitisation that
-    # scheduler.py applied so fromisoformat can parse it.
+    # Capture filenames look like ``2026-04-21T17-07-32p08-00``, or
+    # ``…-07-00`` for negative offsets (scheduler.py only rewrites "+").
+    # ``m07-00`` is also accepted. Reverse the sanitisation so
+    # fromisoformat can parse it.
     if len(stem) < 20:
         return None
     try:
@@ -59,7 +60,7 @@ def _stem_to_dt(stem: str) -> datetime | None:
         offset = stem[19:]
         if offset.startswith("p"):
             tz = "+" + offset[1:].replace("-", ":")
-        elif offset.startswith("m"):
+        elif offset.startswith(("m", "-")):
             tz = "-" + offset[1:].replace("-", ":")
         else:
             tz = ""

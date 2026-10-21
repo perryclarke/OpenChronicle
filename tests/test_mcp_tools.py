@@ -1,7 +1,12 @@
 """Test MCP tool functions directly (bypassing FastMCP wiring)."""
 
+import json
+from datetime import datetime
 from pathlib import Path
 
+import pytest
+
+from openchronicle.capture import scheduler as scheduler_mod
 from openchronicle.mcp import captures as captures_mod
 from openchronicle.mcp import server as mcp_server
 from openchronicle.store import entries as entries_mod
@@ -172,3 +177,46 @@ def test_current_context_app_filter(ac_root: Path) -> None:
 
     ctx = captures_mod.current_context(app_filter="Safari", headline_limit=5)
     assert [h["file_stem"] for h in ctx["recent_captures_headline"]] == ["c2"]
+
+
+# ─── read_recent_capture ──────────────────────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    "iso",
+    [
+        "2026-04-22T14:00:00+08:00",
+        "2026-10-21T12:16:22-07:00",
+        "2026-10-21T12:16:22+00:00",
+        "2026-10-21T12:16:22-03:30",
+    ],
+)
+def test_parse_stem_round_trips_scheduler_filename(iso: str) -> None:
+    stem = scheduler_mod._safe_filename(iso)
+    assert captures_mod._parse_stem(stem) == datetime.fromisoformat(iso)
+
+
+def _write_capture_file(buf: Path, *, ts: str, app: str, title: str, text: str) -> None:
+    data = {
+        "timestamp": ts,
+        "window_meta": {"app_name": app, "title": title, "bundle_id": "com.test." + app.lower()},
+        "visible_text": text,
+    }
+    (buf / f"{scheduler_mod._safe_filename(ts)}.json").write_text(json.dumps(data))
+
+
+def test_read_recent_capture_with_negative_offset(ac_root: Path) -> None:
+    from openchronicle import paths
+
+    buf = paths.capture_buffer_dir()
+    _write_capture_file(buf, ts="2026-10-21T12:35:00-07:00", app="FileMerge", title="Compare", text="A")
+    _write_capture_file(buf, ts="2026-10-21T12:37:00-07:00", app="Terminal", title="zsh", text="B")
+    _write_capture_file(buf, ts="2026-10-21T12:39:00-07:00", app="FileMerge", title="Compare", text="C")
+
+    newest = captures_mod.read_recent_capture()
+    assert newest is not None and newest["visible_text"] == "C"
+
+    nearest = captures_mod.read_recent_capture(at="2026-10-21T12:36:00-07:00", app_name="filemerge")
+    assert nearest is not None and nearest["visible_text"] == "A"
+
+    assert captures_mod.read_recent_capture(at="2026-10-21T13:30:00-07:00") is None

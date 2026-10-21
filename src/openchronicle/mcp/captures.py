@@ -33,6 +33,12 @@ def _parse_stem(stem: str) -> datetime | None:
                 return datetime.fromisoformat(
                     f"{date_part}T{h}:{m}:{s}{sign}{oh}:{om}"
                 )
+        # scheduler only rewrites "+", so negative offsets keep their "-":
+        # ``12-16-22-07-00``.
+        if len(rest) == 14 and rest[8] == "-":
+            h, m, s = rest[:8].split("-")
+            oh, om = rest[9:].split("-")
+            return datetime.fromisoformat(f"{date_part}T{h}:{m}:{s}-{oh}:{om}")
         return None
     except (ValueError, IndexError):
         return None
