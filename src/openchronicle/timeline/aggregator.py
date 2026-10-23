@@ -14,6 +14,7 @@ fields are back-rendered via ``ax_tree_to_markdown`` as a fallback.
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime
 from pathlib import Path
 
@@ -37,6 +38,18 @@ _PER_CAPTURE_TEXT_LIMIT = 4000
 # 30+ captures, keep the newest ones. Later events are more recent and
 # tend to be more informative.
 _MAX_EVENTS_PER_WINDOW = 30
+
+# Distinctive strings from the worked example in prompts/timeline_block.md.
+# Small models sometimes copy the example into their output; an entry that
+# repeats one of these when it wasn't in the window's captures is dropped.
+_PROMPT_EXAMPLE_MARKERS = (
+    "ACME Q3 roadmap",
+    "docs.example/roadmap",
+    "Owner: Alice",
+    "Owner Alice",
+    "Deadline Oct 14",
+    "milk, eggs, flour",
+)
 
 # Mirrors the output shape documented in prompts/timeline_block.md.
 _BLOCK_JSON_SCHEMA = {
@@ -163,11 +176,14 @@ def _format_events(parsed: list[tuple[Path, dict]]) -> tuple[str, list[str]]:
             fe_title = str(fe.get("title") or "")
             if fe_title:
                 role_desc += f" title={fe_title[:80]}"
-            value_length = int(fe.get("value_length") or 0)
-            if value_length:
-                role_desc += f" len={value_length}"
             value = str(fe.get("value") or "")
-            if value:
+            # Terminal reports its tab title as the focused element; repeating
+            # it in the `len=N: value` form reads like typed text.
+            repeats_title = bool(value) and value == title and not fe.get("is_editable")
+            value_length = int(fe.get("value_length") or 0)
+            if value_length and not repeats_title:
+                role_desc += f" len={value_length}"
+            if value and not repeats_title:
                 role_desc += f": {value}"
             parts.append(role_desc)
 
@@ -240,6 +256,7 @@ def produce_block_for_window(
         end_time=_format_window(end),
         capture_count=capture_count,
         events_text=events_text,
+        authored_count=sum("(editing)" in line for line in events_text.splitlines()),
     )
 
     entries: list[str] = []
@@ -261,6 +278,7 @@ def produce_block_for_window(
     except Exception as exc:  # noqa: BLE001
         logger.warning("timeline: LLM call failed: %s", exc)
 
+    entries = _drop_ungrounded_entries(entries, apps_used, events_text)
     if not entries:
         entries = _heuristic_entries(parsed)
 
@@ -279,6 +297,29 @@ def produce_block_for_window(
         len(entries), capture_count, ", ".join(apps_used),
     )
     return block
+
+
+def _drop_ungrounded_entries(
+    entries: list[str], apps_used: list[str], events_text: str,
+) -> list[str]:
+    """Drop entries that can't have come from this window's captures.
+
+    An entry is dropped if its ``[App]`` prefix names an app that wasn't
+    captured, or if it repeats the prompt's worked example when that text
+    wasn't on screen.
+    """
+    apps = {a.lower() for a in apps_used}
+    kept: list[str] = []
+    for entry in entries:
+        m = re.match(r"\[([^\]]+)\]", entry)
+        if m and apps and m.group(1).strip().lower() not in apps:
+            logger.info("timeline: dropped entry for app not on screen: %s", entry[:120])
+            continue
+        if any(k in entry and k not in events_text for k in _PROMPT_EXAMPLE_MARKERS):
+            logger.info("timeline: dropped entry copied from prompt example: %s", entry[:120])
+            continue
+        kept.append(entry)
+    return kept
 
 
 def _heuristic_entries(parsed: list[tuple[Path, dict]]) -> list[str]:

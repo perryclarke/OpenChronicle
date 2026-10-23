@@ -58,10 +58,14 @@ Explicit rules (see the prompt for the full list):
 
 - **Verbatim preservation.** Authored text from editable inputs must be carried into the entry in quotes, not paraphrased. URLs, window titles, file paths, and proper nouns must be verbatim.
 - **Anti-hallucination.** Topics and people seen in one conversation must not be cross-attributed to another conversation in the same app (multiple tabs, multiple chats).
-- **Authorship guard.** Typing into a search box / address bar is not chat participation.
+- **Authorship guard.** Typing into a search box / address bar is not chat participation. The prompt also states how many `(editing)` snapshots the window has (computed in code); when there are none, the model is told not to describe anything as typed.
 - **De-duplication.** Collapse consecutive identical passive reads; keep the longest version of an in-progress draft.
 
-On any failure (JSON parse, LLM timeout, empty), the code falls back to a heuristic entry built from `window_meta.app_name` counts. Never silently drops a window.
+The rules and worked example come before the window's snapshots, so the real input is the last thing the model reads. Small models (such as macOS 27's on-device model) copied the example into their output when it came last.
+
+After the model replies, the code drops any entry whose `[App]` prefix names an app with no capture in the window, and any entry that repeats the prompt's example text when that text wasn't on screen.
+
+On any failure (JSON parse, LLM timeout, empty — including every entry being dropped), the code falls back to a heuristic entry built from `window_meta.app_name` counts. Never silently drops a window.
 
 ## Schema
 

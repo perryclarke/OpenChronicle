@@ -2,11 +2,7 @@ You are normalizing a short slice of one user's screen activity into a cleaner, 
 
 **Your job is normalization, NOT summarization.** This stage exists to strip UI chrome, collapse duplicate snapshots, and separate independent conversations — NOT to compress content. Authored text, URLs, window titles, file paths, and quoted evidence MUST appear verbatim in your output. Downstream stages rely on this fidelity.
 
-Window: {start_time} to {end_time} ({capture_count} screen-content snapshots from the macOS Accessibility API). Records are ordered chronologically — earlier first. The format of each event: `N. [HH:MM:SS] <App> — <window title> (<bundle>) (URL: ...) [<role>] (editing) title=... len=N: <verbatim value>`, optionally followed by a `| <visible_text>` line. Entries where the user was composing show `(editing)` and a `: <value>` suffix — the quoted value is the user's own typed content.
-
----
-{events_text}
----
+The rules and a worked example come first. The real snapshots to normalize are at the end, under **Input**.
 
 ## Anti-hallucination rule — the most important rule in this prompt.
 
@@ -82,5 +78,17 @@ Bad output (do NOT do this):
 ```
 
 The bad version threw away the verbatim list content ("milk, eggs, flour, butter"), the URL, and the specific owner / deadline that were visible on the page. Those facts are exactly what downstream reducers need to preserve.
+
+The example above is illustrative only. Never copy its apps, names, or text into your output — describe only the Input below.
+
+## Input
+
+Window: {start_time} to {end_time} ({capture_count} screen-content snapshots from the macOS Accessibility API). Records are ordered chronologically — earlier first. The format of each event: `N. [HH:MM:SS] <App> — <window title> (<bundle>) (URL: ...) [<role>] (editing) title=... len=N: <verbatim value>`, optionally followed by a `| <visible_text>` line. Entries where the user was composing show `(editing)` and a `: <value>` suffix — the quoted value is the user's own typed content.
+
+---
+{events_text}
+---
+
+Authored-text snapshots (`(editing)` lines) in this window: {authored_count}. If this is 0, the user typed nothing in this window: do not describe anything as typed, drafted, written, or composed by the user.
 
 Output only the JSON object, no markdown fences and no surrounding prose.
