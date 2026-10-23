@@ -204,3 +204,66 @@ def test_enrich_falls_back_to_first_app_when_no_frontmost() -> None:
     }
     s1_parser.enrich(capture)
     assert "hello" in capture["visible_text"]
+
+
+def _slack_like_capture(trigger: dict, bundle_id: str = "com.tinyspeck.slackmacgap") -> dict:
+    """Focused window whose composer is nested, as in real Slack/Safari trees."""
+    return {
+        "trigger": trigger,
+        "ax_tree": _ax_tree(
+            {
+                "name": "App",
+                "bundle_id": bundle_id,
+                "is_frontmost": True,
+                "windows": [
+                    {
+                        "title": "Jason Blazick (DM)",
+                        "focused": True,
+                        "elements": [
+                            {"role": "AXStaticText", "value": "Jason Blazick (DM)"},
+                            {"role": "AXGroup", "children": [
+                                {"role": "AXGroup", "children": [{"role": "AXTextArea", "value": ""}]},
+                            ]},
+                        ],
+                    }
+                ],
+            }
+        ),
+    }
+
+
+def _typed(element: dict, bundle_id: str = "com.tinyspeck.slackmacgap") -> dict:
+    return {"event_type": "UserTextInput", "bundle_id": bundle_id, "window_title": "w", "element": element}
+
+
+def test_enrich_uses_element_reported_by_text_input_event() -> None:
+    capture = _slack_like_capture(_typed({"role": "AXTextArea", "subrole": "", "title": "", "value": "on my way"}))
+    s1_parser.enrich(capture)
+    fe = capture["focused_element"]
+    assert fe["role"] == "AXTextArea"
+    assert fe["is_editable"] is True
+    assert fe["value"] == "on my way"
+
+
+def test_enrich_ignores_text_input_value_from_terminal_apps() -> None:
+    scrollback = "Last login: Wed Oct 21 11:28:24 on ttys002\n~ % ls\nsrc docs"
+    trigger = _typed({"role": "AXTextArea", "value": scrollback}, bundle_id="com.apple.Terminal")
+    capture = _slack_like_capture(trigger, bundle_id="com.apple.Terminal")
+    s1_parser.enrich(capture)
+    fe = capture["focused_element"]
+    assert fe["is_editable"] is False
+    assert fe["value"] != scrollback
+
+
+def test_enrich_text_input_with_empty_value_uses_the_tree() -> None:
+    capture = _slack_like_capture(_typed({"role": "AXTextArea", "value": ""}))
+    s1_parser.enrich(capture)
+    assert capture["focused_element"]["role"] == "AXStaticText"
+    assert capture["focused_element"]["is_editable"] is False
+
+
+def test_enrich_text_input_from_non_text_element_uses_the_tree() -> None:
+    capture = _slack_like_capture(_typed({"role": "AXWebArea", "value": "page text"}))
+    s1_parser.enrich(capture)
+    assert capture["focused_element"]["role"] == "AXStaticText"
+    assert capture["focused_element"]["is_editable"] is False

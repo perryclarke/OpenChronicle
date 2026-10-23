@@ -97,7 +97,7 @@ Secure fields (password inputs) are replaced with `"[REDACTED]"` at the helper l
 
 Ported from Einsia-Partner's `s1_collector`. These are what downstream LLM stages consume — the raw `ax_tree` is kept only for future vision-model support and debugging.
 
-- **`focused_element`** — `{role, title, value, is_editable, value_length}` for the currently focused AX element. This is the user's cursor context: what they're typing into, which sidebar row is selected, etc.
+- **`focused_element`** — `{role, title, value, is_editable, value_length}` for the user's cursor context. For a `UserTextInput` capture it is the field the watcher saw being typed into, with its value once typing paused (`is_editable: true`); terminal emulators are excluded because their focused text area is the whole scrollback. Otherwise the AX tree only records which *window* is focused, so this is the first text-bearing element at the top of that window, and is never marked editable for nested fields.
 - **`visible_text`** — a length-capped markdown rendering of the AX tree (up to ~10 k chars). What the user is currently reading on screen.
 - **`url`** — regex-extracted from `visible_text` when present; `null` otherwise.
 

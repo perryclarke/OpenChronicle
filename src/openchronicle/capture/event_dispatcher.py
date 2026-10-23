@@ -46,7 +46,8 @@ class EventDispatcher:
 
     ``capture_fn`` should be idempotent and safe to call from this thread.
     It will be called with a kwarg ``trigger`` carrying the event metadata
-    (event_type / bundle_id / window_title) so captures can be logged.
+    (event_type / bundle_id / window_title, plus ``element`` — the field typed
+    into and its value — for ``UserTextInput``) so captures can be logged.
     """
 
     def __init__(
@@ -102,6 +103,12 @@ class EventDispatcher:
             "bundle_id": bundle_id,
             "window_title": window_title,
         }
+        if event_type == "UserTextInput":
+            # The watcher reports the element that had keyboard focus and its
+            # value after typing paused; s1_parser uses it as the authored text.
+            element = (raw.get("details") or {}).get("element")
+            if isinstance(element, dict) and element:
+                trigger["element"] = element
 
         if event_type in _IMMEDIATE_EVENTS:
             self._cancel_debounce()

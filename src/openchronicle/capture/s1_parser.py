@@ -34,6 +34,19 @@ _URL_RE = re.compile(r"https?://\S+")
 _EDITABLE_ROLES = {"AXTextField", "AXTextArea", "AXComboBox"}
 _STATIC_ROLES = {"AXStaticText", "AXWebArea"}
 
+# In terminal emulators the focused AXTextArea is the whole scrollback, not
+# what the user just typed, so its value is never treated as authored text.
+_TERMINAL_BUNDLES = {
+    "com.apple.Terminal",
+    "com.googlecode.iterm2",
+    "dev.warp.Warp-Stable",
+    "net.kovidgoyal.kitty",
+    "org.alacritty",
+    "com.github.wez.wezterm",
+    "com.mitchellh.ghostty",
+    "co.zeit.hyper",
+}
+
 _VISIBLE_TEXT_MAX = 10_000
 _FOCUS_TITLE_MAX = 200
 _FOCUS_VALUE_MAX = 2_000
@@ -72,9 +85,35 @@ def enrich(capture: dict[str, Any]) -> None:
         capture["url"] = None
         return
 
-    capture["focused_element"] = _extract_focused_element(app_data).to_dict()
+    capture["focused_element"] = (
+        _typed_element(capture) or _extract_focused_element(app_data)
+    ).to_dict()
     capture["visible_text"] = _render_visible_text(app_data)
     capture["url"] = _extract_url(app_data)
+
+
+def _typed_element(capture: dict[str, Any]) -> FocusedElement | None:
+    """The text field the user just typed into, as reported by the watcher.
+
+    Only a ``UserTextInput`` trigger knows which element had keyboard focus;
+    the AX tree records focus per window, not per element.
+    """
+    trigger = capture.get("trigger") or {}
+    if trigger.get("event_type") != "UserTextInput":
+        return None
+    el = trigger.get("element")
+    if not isinstance(el, dict) or trigger.get("bundle_id") in _TERMINAL_BUNDLES:
+        return None
+    role = el.get("role") or ""
+    value = el.get("value") or ""
+    if role not in _EDITABLE_ROLES or not value.strip():
+        return None
+    return FocusedElement(
+        role=role,
+        title=(el.get("title") or "")[:_FOCUS_TITLE_MAX],
+        value=value[:_FOCUS_VALUE_MAX],
+        is_editable=True,
+    )
 
 
 def _frontmost_app(ax_tree: dict[str, Any]) -> dict[str, Any] | None:
